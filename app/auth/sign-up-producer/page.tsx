@@ -1,17 +1,17 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
+import { syncUserProfileAndRole } from "@/lib/authHelpers";
 
 export default function SignUpProducerPage() {
-  const router = useRouter();
   const supabase = getBrowserSupabaseClient();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const resolveRedirectUrl = () => {
@@ -53,6 +53,7 @@ export default function SignUpProducerPage() {
   const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
+    setInfoMessage(null);
     setIsSubmitting(true);
 
     try {
@@ -90,22 +91,18 @@ export default function SignUpProducerPage() {
         throw new Error("Kullanıcı oluşturulamadı. Lütfen tekrar deneyin.");
       }
 
-      const { error: profileError } = await supabase.from("users").upsert(
-        {
-          id: user.id,
-          email: user.email ?? email.trim().toLowerCase(),
-          username: cleanedUsername,
-          role: "producer",
-        },
-        { onConflict: "id" }
-      );
-
-      if (profileError) {
-        console.error("Profile upsert error", profileError);
-        throw new Error("Profil oluşturulurken bir hata meydana geldi. Lütfen tekrar dene.");
+      try {
+        await syncUserProfileAndRole(supabase, user);
+      } catch (profileSyncError) {
+        console.error(
+          "Profil senkronizasyonu hatası (sign-up producer):",
+          profileSyncError
+        );
       }
 
-      router.push("/dashboard/producer");
+      setInfoMessage(
+        "Kayıt başarılı! Lütfen e-posta kutunu kontrol et ve doğrulama bağlantısına tıkla."
+      );
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Kayıt sırasında bir hata oluştu.";
@@ -166,6 +163,8 @@ export default function SignUpProducerPage() {
 
           {error ? (
             <p className="text-sm text-red-400">{error}</p>
+          ) : infoMessage ? (
+            <p className="text-sm text-amber-200">{infoMessage}</p>
           ) : (
             <p className="text-xs text-slate-400">
               Hesap açarak gizlilik politikamızı kabul etmiş olursun.
