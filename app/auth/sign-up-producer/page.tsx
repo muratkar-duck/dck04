@@ -14,6 +14,42 @@ export default function SignUpProducerPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const resolveRedirectUrl = () => {
+    const envUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+
+    if (envUrl) {
+      return `${envUrl}/auth/confirm`;
+    }
+
+    if (typeof window !== "undefined") {
+      return `${window.location.origin}/auth/confirm`;
+    }
+
+    return undefined;
+  };
+
+  const getFriendlyErrorMessage = (message?: string) => {
+    if (!message) {
+      return "Kayıt sırasında bir hata oluştu. Lütfen tekrar dene.";
+    }
+
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes("already registered")) {
+      return "Bu e-posta adresiyle zaten bir hesap bulunuyor. Lütfen giriş yapın.";
+    }
+
+    if (normalized.includes("password should be at least")) {
+      return "Şifren 6 karakterden uzun olmalıdır.";
+    }
+
+    if (normalized.includes("rate limit")) {
+      return "Çok fazla deneme yaptın. Lütfen birkaç dakika sonra tekrar dene.";
+    }
+
+    return message;
+  };
+
   const handleSignUp = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
@@ -26,13 +62,26 @@ export default function SignUpProducerPage() {
         throw new Error("Profil adı zorunludur.");
       }
 
+      if (!supabase) {
+        console.error("Supabase client bulunamadı. Environment değişkenlerini kontrol edin.");
+        throw new Error("Sistem yapılandırması tamamlanmadı. Lütfen daha sonra tekrar deneyin.");
+      }
+
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
+        email: email.trim().toLowerCase(),
         password,
+        options: {
+          data: {
+            role: "producer",
+            username: cleanedUsername,
+          },
+          emailRedirectTo: resolveRedirectUrl(),
+        },
       });
 
       if (signUpError) {
-        throw signUpError;
+        console.error("Supabase signUp hatası:", signUpError.message);
+        throw new Error(getFriendlyErrorMessage(signUpError.message));
       }
 
       const userId = data.user?.id;
@@ -41,14 +90,19 @@ export default function SignUpProducerPage() {
         throw new Error("Kullanıcı oluşturulamadı. Lütfen tekrar deneyin.");
       }
 
-      const { error: profileError } = await supabase.from("users").insert({
-        id: userId,
-        username: cleanedUsername,
-        role: "producer",
-      });
+      const { error: profileError } = await supabase.from("users").upsert(
+        {
+          id: userId,
+          email: data.user?.email ?? email.trim().toLowerCase(),
+          username: cleanedUsername,
+          role: "producer",
+        },
+        { onConflict: "id" }
+      );
 
       if (profileError) {
-        throw profileError;
+        console.error("Supabase users upsert hatası:", profileError.message);
+        throw new Error("Profil oluşturulurken bir hata meydana geldi. Lütfen tekrar dene.");
       }
 
       router.push("/dashboard/producer");

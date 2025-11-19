@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { type User } from "@supabase/supabase-js";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
 
 export default function SignInPage() {
@@ -13,19 +14,125 @@ export default function SignInPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const getFriendlyErrorMessage = (message?: string) => {
+    if (!message) {
+      return "Giriş sırasında bir hata oluştu.";
+    }
+
+    const normalized = message.toLowerCase();
+
+    if (normalized.includes("invalid login credentials")) {
+      return "E-posta veya şifre hatalı.";
+    }
+
+    if (normalized.includes("email not confirmed") || normalized.includes("email_not_confirmed")) {
+      return "Lütfen e-posta adresini onayla.";
+    }
+
+    if (normalized.includes("user not found")) {
+      return "Bu e-posta adresiyle kayıtlı bir kullanıcı bulunamadı.";
+    }
+
+    if (normalized.includes("rate limit")) {
+      return "Çok fazla deneme yaptın. Lütfen birkaç dakika sonra tekrar dene.";
+    }
+
+    return message;
+  };
+
+  const handlePostAuth = useCallback(
+    async (user: User) => {
+      if (!supabase) {
+        console.error("Supabase client bulunamadı. Environment değişkenlerini kontrol edin.");
+        setError("Sistem yapılandırması tamamlanmadı. Lütfen daha sonra tekrar dene.");
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      if (profileError && profileError.code !== "PGRST116") {
+        console.error("Supabase users select hatası:", profileError.message);
+      }
+
+      const resolvedRole = (profile?.role as "writer" | "producer" | undefined) ??
+        (user.user_metadata?.role as "writer" | "producer" | undefined) ??
+        "writer";
+
+      if (!profile) {
+        const { error: upsertError } = await supabase.from("users").upsert(
+          {
+            id: user.id,
+            email: user.email ?? undefined,
+            username: (user.user_metadata?.username as string | undefined) ?? undefined,
+            role: resolvedRole,
+          },
+          { onConflict: "id" }
+        );
+
+        if (upsertError) {
+          console.error("Supabase users upsert hatası:", upsertError.message);
+        }
+      }
+
+      const destination = resolvedRole === "producer" ? "/dashboard/producer" : "/dashboard/writer";
+      router.push(destination);
+    },
+    [router, supabase]
+  );
+
+  useEffect(() => {
+    if (!supabase) {
+      return;
+    }
+
+    let isMounted = true;
+
+    const checkSession = async () => {
+      const { data } = await supabase.auth.getSession();
+      const activeUser = data.session?.user;
+
+      if (activeUser && isMounted) {
+        await handlePostAuth(activeUser);
+      }
+    };
+
+    checkSession();
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        handlePostAuth(session.user);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      listener?.subscription.unsubscribe();
+    };
+  }, [handlePostAuth, supabase]);
+
   const handleSignIn = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError(null);
     setIsSubmitting(true);
 
     try {
+      if (!supabase) {
+        console.error("Supabase client bulunamadı. Environment değişkenlerini kontrol edin.");
+        throw new Error("Sistem yapılandırması tamamlanmadı. Lütfen daha sonra tekrar dene.");
+      }
+
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim().toLowerCase(),
         password,
       });
 
       if (signInError) {
-        throw signInError;
+        console.error("Supabase signIn hatası:", signInError.message);
+        throw new Error(getFriendlyErrorMessage(signInError.message));
       }
 
       const user = data.user;
@@ -34,20 +141,7 @@ export default function SignInPage() {
         throw new Error("Giriş başarısız. Lütfen bilgilerini kontrol et.");
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (profileError) {
-        throw profileError;
-      }
-
-      const role = profile?.role ?? "writer";
-      const destination = role === "producer" ? "/dashboard/producer" : "/dashboard/writer";
-
-      router.push(destination);
+      await handlePostAuth(user);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Giriş sırasında bir hata oluştu.";
