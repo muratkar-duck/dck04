@@ -45,17 +45,18 @@ export default function SignInPage() {
         return;
       }
 
+      let resolvedRole: UserRole | undefined;
+
       try {
-        const resolvedRole: UserRole = await syncUserProfileAndRole(supabase, user);
-        router.push(getDashboardPathForRole(resolvedRole));
+        resolvedRole = await syncUserProfileAndRole(supabase, user);
       } catch (profileError) {
-        console.error("Profil senkronizasyonu sırasında hata:", profileError);
-        setError(
-          profileError instanceof Error
-            ? profileError.message
-            : "Profiliniz oluşturulurken bir sorun oluştu, lütfen tekrar deneyin."
-        );
+        console.error("Profil senkronizasyonu hatası (sign-in):", profileError);
       }
+
+      const fallbackRole =
+        resolvedRole || (user.user_metadata?.role as UserRole | undefined) || "writer";
+
+      router.push(getDashboardPathForRole(fallbackRole));
     },
     [router, supabase]
   );
@@ -112,18 +113,17 @@ export default function SignInPage() {
         password,
       });
 
-      if (signInError) {
-        console.error("Supabase login hatası:", signInError.message || signInError);
-        throw new Error(getFriendlyErrorMessage(signInError.message));
+      if (signInError || !data.user) {
+        const friendlyMessage = getFriendlyErrorMessage(signInError?.message);
+
+        if (signInError) {
+          console.error("Supabase login hatası:", signInError.message || signInError);
+        }
+
+        throw new Error(friendlyMessage);
       }
 
-      const user = data.user ?? data.session?.user;
-
-      if (!user) {
-        throw new Error("Giriş sırasında bir hata oluştu.");
-      }
-
-      await handlePostAuth(user);
+      await handlePostAuth(data.user);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Giriş sırasında bir hata oluştu.";

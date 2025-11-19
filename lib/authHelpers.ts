@@ -53,10 +53,20 @@ export const syncUserProfileAndRole = async (
       );
 
     if (upsertError) {
-      console.error("Supabase users upsert hatası:", upsertError.message);
-      throw new Error(
-        "Profiliniz oluşturulurken bir sorun oluştu, lütfen tekrar deneyin."
-      );
+      const lowerDetails = upsertError.details?.toLowerCase() ?? "";
+      const lowerMessage = upsertError.message?.toLowerCase() ?? "";
+      const isUniqueViolation =
+        upsertError.code === "23505" ||
+        lowerDetails.includes("duplicate") ||
+        lowerMessage.includes("duplicate");
+
+      console.error("Supabase users upsert hatası:", upsertError.message || upsertError);
+
+      if (!isUniqueViolation) {
+        throw new Error(
+          "Profiliniz oluşturulurken bir sorun oluştu, lütfen tekrar deneyin."
+        );
+      }
     }
   }
 
