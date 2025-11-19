@@ -5,6 +5,11 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { type User } from "@supabase/supabase-js";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
+import {
+  getDashboardPathForRole,
+  syncUserProfileAndRole,
+  type UserRole,
+} from "@/lib/authHelpers";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -29,15 +34,7 @@ export default function SignInPage() {
       return "Lütfen e-posta adresini onayla.";
     }
 
-    if (normalized.includes("user not found")) {
-      return "Bu e-posta adresiyle kayıtlı bir kullanıcı bulunamadı.";
-    }
-
-    if (normalized.includes("rate limit")) {
-      return "Çok fazla deneme yaptın. Lütfen birkaç dakika sonra tekrar dene.";
-    }
-
-    return message;
+    return "Giriş sırasında bir hata oluştu.";
   };
 
   const handlePostAuth = useCallback(
@@ -48,38 +45,17 @@ export default function SignInPage() {
         return;
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("users")
-        .select("role")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (profileError && profileError.code !== "PGRST116") {
-        console.error("Supabase users select hatası:", profileError.message);
-      }
-
-      const resolvedRole = (profile?.role as "writer" | "producer" | undefined) ??
-        (user.user_metadata?.role as "writer" | "producer" | undefined) ??
-        "writer";
-
-      if (!profile) {
-        const { error: upsertError } = await supabase.from("users").upsert(
-          {
-            id: user.id,
-            email: user.email ?? undefined,
-            username: (user.user_metadata?.username as string | undefined) ?? undefined,
-            role: resolvedRole,
-          },
-          { onConflict: "id" }
+      try {
+        const resolvedRole: UserRole = await syncUserProfileAndRole(supabase, user);
+        router.push(getDashboardPathForRole(resolvedRole));
+      } catch (profileError) {
+        console.error("Profil senkronizasyonu sırasında hata:", profileError);
+        setError(
+          profileError instanceof Error
+            ? profileError.message
+            : "Profiliniz oluşturulurken bir sorun oluştu, lütfen tekrar deneyin."
         );
-
-        if (upsertError) {
-          console.error("Supabase users upsert hatası:", upsertError.message);
-        }
       }
-
-      const destination = resolvedRole === "producer" ? "/dashboard/producer" : "/dashboard/writer";
-      router.push(destination);
     },
     [router, supabase]
   );
@@ -137,14 +113,14 @@ export default function SignInPage() {
       });
 
       if (signInError) {
-        console.error("Supabase signIn hatası:", signInError.message);
+        console.error("Supabase login hatası:", signInError.message || signInError);
         throw new Error(getFriendlyErrorMessage(signInError.message));
       }
 
-      const user = data.user;
+      const user = data.user ?? data.session?.user;
 
       if (!user) {
-        throw new Error("Giriş başarısız. Lütfen bilgilerini kontrol et.");
+        throw new Error("Giriş sırasında bir hata oluştu.");
       }
 
       await handlePostAuth(user);
