@@ -1,23 +1,19 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-const ensureEnvVars = () => {
-  if (!supabaseUrl || !supabaseAnonKey) {
-    console.warn(
-      "Supabase URL veya anon key tanımlı değil. Lütfen .env dosyanızı kontrol edin. Uygulama bu durumda sınırlı çalışacaktır."
-    );
-    return false;
-  }
-
-  return true;
+const warnMissingEnv = () => {
+  console.warn(
+    "Supabase URL veya anon key tanımlı değil. Lütfen .env dosyanızı kontrol edin. Uygulama bu durumda sınırlı çalışacaktır."
+  );
 };
 
 let browserClient: SupabaseClient | null = null;
 
 export const getBrowserSupabaseClient = (): SupabaseClient | null => {
-  if (!ensureEnvVars()) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    warnMissingEnv();
     return null;
   }
 
@@ -35,7 +31,11 @@ export const getBrowserSupabaseClient = (): SupabaseClient | null => {
 };
 
 export const getServerSupabaseClient = (accessToken?: string): SupabaseClient | null => {
-  if (!ensureEnvVars()) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    warnMissingEnv();
     return null;
   }
 
