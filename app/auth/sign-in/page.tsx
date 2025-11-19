@@ -92,8 +92,14 @@ export default function SignInPage() {
     let isMounted = true;
 
     const checkSession = async () => {
-      const { data } = await supabase.auth.getSession();
-      const activeUser = data.session?.user;
+      const { data, error } = await supabase.auth.getUser();
+
+      if (error) {
+        console.error("Supabase auth.getUser hatası:", error.message);
+        return;
+      }
+
+      const activeUser = data.user;
 
       if (activeUser && isMounted) {
         await handlePostAuth(activeUser);

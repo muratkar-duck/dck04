@@ -84,16 +84,16 @@ export default function SignUpProducerPage() {
         throw new Error(getFriendlyErrorMessage(signUpError.message));
       }
 
-      const userId = data.user?.id;
+      const user = data.user;
 
-      if (!userId) {
+      if (!user) {
         throw new Error("Kullanıcı oluşturulamadı. Lütfen tekrar deneyin.");
       }
 
       const { error: profileError } = await supabase.from("users").upsert(
         {
-          id: userId,
-          email: data.user?.email ?? email.trim().toLowerCase(),
+          id: user.id,
+          email: user.email ?? email.trim().toLowerCase(),
           username: cleanedUsername,
           role: "producer",
         },
@@ -101,7 +101,7 @@ export default function SignUpProducerPage() {
       );
 
       if (profileError) {
-        console.error("Supabase users upsert hatası:", profileError.message);
+        console.error("Profile upsert error", profileError);
         throw new Error("Profil oluşturulurken bir hata meydana geldi. Lütfen tekrar dene.");
       }
 
