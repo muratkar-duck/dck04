@@ -27,9 +27,7 @@ export type AutoIngestResult = {
   rawResponse: unknown;
 };
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let openai: OpenAI | null = null;
 
 /**
  * Ensure we have an API key; otherwise fail fast with a clear error.
@@ -40,6 +38,16 @@ function ensureApiKey() {
       "OPENAI_API_KEY is not set. Please define it in your environment variables."
     );
   }
+}
+
+function getOpenAIClient(): OpenAI {
+  ensureApiKey();
+  if (!openai) {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY!,
+    });
+  }
+  return openai;
 }
 
 /**
@@ -93,8 +101,6 @@ function safeParseJson(content: string): any {
 export async function runAutoIngestLLM(
   scriptText: string
 ): Promise<AutoIngestResult> {
-  ensureApiKey();
-
   const model =
     process.env.OPENAI_AUTO_INGEST_MODEL?.trim() || "gpt-4o-mini";
 
@@ -151,7 +157,9 @@ SCREENPLAY TEXT (TRUNCATED IF TOO LONG):
 ${truncatedScript}
 `.trim();
 
-  const completion = await openai.chat.completions.create({
+  const client = getOpenAIClient();
+
+  const completion = await client.chat.completions.create({
     model,
     response_format: { type: "json_object" },
     messages: [
