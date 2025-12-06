@@ -10,12 +10,18 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.83.0",
+    "@supabase/ssr": "^0.8.0",
+    "fast-xml-parser": "^4.3.2",
+    "mammoth": "^1.7.2",
     "next": "14.2.5",
+    "openai": "^4.54.1",
+    "pdf-parse": "^1.1.1",
     "react": "18.3.1",
     "react-dom": "18.3.1"
   },
   "devDependencies": {
     "@types/node": "20.14.9",
+    "@types/pdf-parse": "^1.1.4",
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
     "autoprefixer": "10.4.19",
