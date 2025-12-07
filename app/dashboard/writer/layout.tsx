@@ -6,5 +6,5 @@ export default function WriterDashboardLayout({
 }: {
   children: ReactNode;
 }) {
-  return <DashboardAuthGuard>{children}</DashboardAuthGuard>;
+  return <DashboardAuthGuard allowedRoles={["writer"]}>{children}</DashboardAuthGuard>;
 }

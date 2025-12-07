@@ -3,13 +3,18 @@
 import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { roleRedirectMap, type UserRole } from "@/lib/authHelpers";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
 
-interface DashboardAuthGuardProps {
+type DashboardAuthGuardProps = {
   children: ReactNode;
-}
+  allowedRoles?: UserRole[];
+};
 
-export function DashboardAuthGuard({ children }: DashboardAuthGuardProps) {
+export function DashboardAuthGuard({
+  children,
+  allowedRoles,
+}: DashboardAuthGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [checking, setChecking] = useState(true);
@@ -29,11 +34,34 @@ export function DashboardAuthGuard({ children }: DashboardAuthGuardProps) {
     }
 
     const checkSession = async () => {
-      const { data, error } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await supabase.auth.getUser();
 
-      if (error || !data.user) {
+      if (userError || !userData.user) {
         setIsAuthed(false);
         redirectToSignIn();
+        setChecking(false);
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("users")
+        .select("id, role")
+        .eq("id", userData.user.id)
+        .maybeSingle();
+
+      if (profileError || !profile) {
+        setIsAuthed(false);
+        router.replace("/");
+        setChecking(false);
+        return;
+      }
+
+      const userRole = profile.role as UserRole;
+
+      if (allowedRoles && !allowedRoles.includes(userRole)) {
+        const redirectTarget = roleRedirectMap[userRole] ?? "/";
+        router.replace(redirectTarget);
+        setIsAuthed(false);
         setChecking(false);
         return;
       }
@@ -43,7 +71,7 @@ export function DashboardAuthGuard({ children }: DashboardAuthGuardProps) {
     };
 
     void checkSession();
-  }, [pathname, router]);
+  }, [allowedRoles, pathname, router]);
 
   if (checking) {
     return (
