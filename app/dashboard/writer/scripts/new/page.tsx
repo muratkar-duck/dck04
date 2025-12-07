@@ -205,7 +205,7 @@ export default function NewWriterScriptPage() {
       const storagePath = existingStoragePath ?? `scripts/${scriptId}/main.${extension}`;
 
       const { error: uploadError } = await supabase.storage
-        .from("scripts")
+        .from("script_files")
         .upload(storagePath, file, {
           cacheControl: "3600",
           upsert: true,
@@ -340,7 +340,7 @@ export default function NewWriterScriptPage() {
       const storagePath = existingStoragePath ?? `scripts/${scriptId}/main.${extension}`;
 
       const { error: uploadError } = await supabase.storage
-        .from("scripts")
+        .from("script_files")
         .upload(storagePath, file, {
           cacheControl: "3600",
           upsert: true,
