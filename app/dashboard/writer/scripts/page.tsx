@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
 
 interface Script {
@@ -24,6 +25,7 @@ const visibilityStyles: Record<Script["visibility"], string> = {
 };
 
 export default function WriterScriptsPage() {
+  const router = useRouter();
   const [scripts, setScripts] = useState<Script[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,11 +46,7 @@ export default function WriterScriptsPage() {
       const { data: userData, error: userError } = await supabase.auth.getUser();
 
       if (userError || !userData.user) {
-        setError(
-          userError?.message ||
-            "Giriş yapmış bir kullanıcı bulunamadı. Lütfen tekrar giriş yapmayı dene."
-        );
-        setIsLoading(false);
+        router.replace("/auth/sign-in?redirect=/dashboard/writer/scripts");
         return;
       }
 
@@ -59,7 +57,8 @@ export default function WriterScriptsPage() {
         .order("created_at", { ascending: false });
 
       if (scriptsError) {
-        setError(scriptsError.message);
+        console.error("Senaryolar alınırken hata oluştu", scriptsError);
+        setError("Senaryolar yüklenirken bir sorun oluştu. Lütfen sayfayı yenileyip tekrar dene.");
       } else {
         setScripts(data || []);
       }
@@ -67,8 +66,8 @@ export default function WriterScriptsPage() {
       setIsLoading(false);
     };
 
-    fetchScripts();
-  }, []);
+    void fetchScripts();
+  }, [router]);
 
   const renderedContent = useMemo(() => {
     if (isLoading) {
