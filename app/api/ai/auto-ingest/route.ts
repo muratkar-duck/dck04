@@ -4,7 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { extractTextFromScriptFile } from "@/lib/ai/textExtractor";
 import { runAutoIngestLLM } from "@/lib/ai/autoIngest";
 
-const STORAGE_BUCKET = "scripts";
+const STORAGE_BUCKET = "script_files";
 
 type AutoIngestRequest = {
   scriptId: string;

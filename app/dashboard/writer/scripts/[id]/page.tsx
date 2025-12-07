@@ -94,7 +94,7 @@ export default function WriterScriptDetailPage() {
       if (fileData) {
         setFile(fileData as ScriptFile);
         const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-          .from("scripts")
+          .from("script_files")
           .createSignedUrl(fileData.storage_path, 60 * 60); // 1 saatlik erişim
 
         if (!signedUrlError && signedUrlData?.signedUrl) {
