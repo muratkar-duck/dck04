@@ -1,17 +1,20 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
+import { type User } from "@supabase/supabase-js";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
-import {
-  type UserRole,
-  getDashboardPathForRole,
-  syncUserProfileAndRole,
-} from "@/lib/authHelpers";
+import { type UserRole, getDashboardPathForRole } from "@/lib/authHelpers";
 
 type DashboardAuthGuardProps = {
   children: ReactNode;
   allowedRoles?: UserRole[];
+};
+
+const resolveRoleFromUser = (user: User | null): UserRole => {
+  const rawRole = (user?.user_metadata?.role as string | undefined) || "writer";
+  if (rawRole === "producer") return "producer";
+  return "writer";
 };
 
 export function DashboardAuthGuard({ children, allowedRoles }: DashboardAuthGuardProps) {
@@ -23,51 +26,35 @@ export function DashboardAuthGuard({ children, allowedRoles }: DashboardAuthGuar
   useEffect(() => {
     const run = async () => {
       const supabase = getBrowserSupabaseClient();
+
       if (!supabase) {
-        router.replace(
-          "/auth/sign-in?redirect=" + encodeURIComponent(pathname)
-        );
+        router.replace("/auth/sign-in?redirect=" + encodeURIComponent(pathname));
         setChecking(false);
         setIsAuthed(false);
         return;
       }
 
       const { data, error } = await supabase.auth.getUser();
-      const user = data?.user;
+      const user = data?.user ?? null;
 
       if (error || !user) {
-        router.replace(
-          "/auth/sign-in?redirect=" + encodeURIComponent(pathname)
-        );
+        router.replace("/auth/sign-in?redirect=" + encodeURIComponent(pathname));
         setChecking(false);
         setIsAuthed(false);
         return;
       }
 
-      let resolvedRole: UserRole | undefined;
-      try {
-        resolvedRole = await syncUserProfileAndRole(supabase, user);
-      } catch (roleError) {
-        console.error("DashboardAuthGuard role resolve hatası:", roleError);
-      }
+      const role = resolveRoleFromUser(user);
 
-      if (!allowedRoles || !allowedRoles.length) {
+      if (!allowedRoles || allowedRoles.length === 0) {
         setIsAuthed(true);
         setChecking(false);
         return;
       }
 
-      if (!resolvedRole) {
-        const fallbackTarget = "/";
-        router.replace(fallbackTarget);
-        setChecking(false);
-        setIsAuthed(false);
-        return;
-      }
-
-      if (!allowedRoles.includes(resolvedRole)) {
-        const redirectTarget = getDashboardPathForRole(resolvedRole) ?? "/";
-        router.replace(redirectTarget);
+      if (!allowedRoles.includes(role)) {
+        const target = getDashboardPathForRole(role) ?? "/";
+        router.replace(target);
         setChecking(false);
         setIsAuthed(false);
         return;
