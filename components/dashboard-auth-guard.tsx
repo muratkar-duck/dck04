@@ -1,68 +1,75 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { roleRedirectMap, type UserRole } from "@/lib/authHelpers";
 import { getBrowserSupabaseClient } from "@/lib/supabaseClient";
+import {
+  type UserRole,
+  getDashboardPathForRole,
+  syncUserProfileAndRole,
+} from "@/lib/authHelpers";
 
 type DashboardAuthGuardProps = {
   children: ReactNode;
   allowedRoles?: UserRole[];
 };
 
-export function DashboardAuthGuard({
-  children,
-  allowedRoles,
-}: DashboardAuthGuardProps) {
+export function DashboardAuthGuard({ children, allowedRoles }: DashboardAuthGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [checking, setChecking] = useState(true);
   const [isAuthed, setIsAuthed] = useState(false);
 
   useEffect(() => {
-    const supabase = getBrowserSupabaseClient();
-    const redirectToSignIn = () => {
-      const redirectUrl = `/auth/sign-in?redirect=${encodeURIComponent(pathname || "/")}`;
-      router.replace(redirectUrl);
-    };
-
-    if (!supabase) {
-      redirectToSignIn();
-      setChecking(false);
-      return;
-    }
-
-    const checkSession = async () => {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-
-      if (userError || !userData.user) {
+    const run = async () => {
+      const supabase = getBrowserSupabaseClient();
+      if (!supabase) {
+        router.replace(
+          "/auth/sign-in?redirect=" + encodeURIComponent(pathname)
+        );
+        setChecking(false);
         setIsAuthed(false);
-        redirectToSignIn();
+        return;
+      }
+
+      const { data, error } = await supabase.auth.getUser();
+      const user = data?.user;
+
+      if (error || !user) {
+        router.replace(
+          "/auth/sign-in?redirect=" + encodeURIComponent(pathname)
+        );
+        setChecking(false);
+        setIsAuthed(false);
+        return;
+      }
+
+      let resolvedRole: UserRole | undefined;
+      try {
+        resolvedRole = await syncUserProfileAndRole(supabase, user);
+      } catch (roleError) {
+        console.error("DashboardAuthGuard role resolve hatası:", roleError);
+      }
+
+      if (!allowedRoles || !allowedRoles.length) {
+        setIsAuthed(true);
         setChecking(false);
         return;
       }
 
-      const { data: profile, error: profileError } = await supabase
-        .from("users")
-        .select("id, role")
-        .eq("id", userData.user.id)
-        .maybeSingle();
-
-      if (profileError || !profile) {
-        setIsAuthed(false);
-        router.replace("/");
+      if (!resolvedRole) {
+        const fallbackTarget = "/";
+        router.replace(fallbackTarget);
         setChecking(false);
+        setIsAuthed(false);
         return;
       }
 
-      const userRole = profile.role as UserRole;
-
-      if (allowedRoles && !allowedRoles.includes(userRole)) {
-        const redirectTarget = roleRedirectMap[userRole] ?? "/";
+      if (!allowedRoles.includes(resolvedRole)) {
+        const redirectTarget = getDashboardPathForRole(resolvedRole) ?? "/";
         router.replace(redirectTarget);
-        setIsAuthed(false);
         setChecking(false);
+        setIsAuthed(false);
         return;
       }
 
@@ -70,12 +77,14 @@ export function DashboardAuthGuard({
       setChecking(false);
     };
 
-    void checkSession();
-  }, [allowedRoles, pathname, router]);
+    void run();
+  }, [router, pathname, allowedRoles]);
 
   if (checking) {
     return (
-      <div className="flex w-full justify-center py-12 text-slate-300">Oturum kontrol ediliyor…</div>
+      <div className="flex w-full justify-center py-12 text-slate-300">
+        Oturum kontrol ediliyor…
+      </div>
     );
   }
 
