@@ -6,5 +6,5 @@ export default function ProducerDashboardLayout({
 }: {
   children: ReactNode;
 }) {
-  return <DashboardAuthGuard>{children}</DashboardAuthGuard>;
+  return <DashboardAuthGuard allowedRoles={["producer"]}>{children}</DashboardAuthGuard>;
 }
